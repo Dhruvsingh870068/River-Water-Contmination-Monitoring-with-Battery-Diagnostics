@@ -1,1 +1,2 @@
 Kindly Note that the block diagram used in the Project report Pdf file does not represent the overall functionality of this project there are some changes also made later on for a better functionality.
+The battery Percentage calculation in this project is an approximation done by the analysis of the loaded Battery Voltage. So the battery percentage desribed by the system is not linear according to time.
