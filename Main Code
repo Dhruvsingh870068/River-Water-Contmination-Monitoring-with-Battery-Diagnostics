@@ -1,0 +1,126 @@
+#include <SoftwareSerial.h>
+#define RX 3
+#define TX 2
+String AP = "MOTO G40 Fusion";    // AP NAME(SSID)
+String PASS = "Dhruv@2003";       // AP PASSWORD
+String API = "A8WY2E0AIZ3E6MZV";  // Write API KEY
+String HOST = "api.thingspeak.com";
+String PORT = "80";
+String field = "field1";
+int countTrueCommand;
+int countTimeCommand;
+boolean found = false;
+int valSensor = 1;
+int number = 0;
+int riv_flow=0;
+int sensorValue = 0;
+float tdsValue = 0;
+double Voltage = 0;
+float TDS = 0;
+int TDSdata = 0;
+//battery Variables
+int BatPercentage = 0;
+double BatVoltage = 0;
+double ChargeCurrent = 0;
+int ChargingStatus = 0;
+SoftwareSerial esp8266(RX, TX);
+
+void setup() {
+  Serial.begin(9600);
+  esp8266.begin(9600);
+  sendCommand("AT", 5, "OK");
+  sendCommand("AT+CWMODE=1", 5, "OK");
+  sendCommand("AT+CWJAP=\"" + AP + "\",\"" + PASS + "\"", 20, "OK");
+}
+
+void loop() {
+  valSensor = getSensorData();
+  TDS = getTDSdata();
+  getBatStatus();
+  riv_flow=getmappedflow();
+  String getData = "GET /update?api_key=" + API + "&" + field + "=" + String(valSensor) + "&field2=" + String(TDS) + "&field3=" + String(riv_flow) + "&field4=" + String(BatPercentage) + "&field5=" + String(BatVoltage) + "&field6=" + String(ChargeCurrent) + "&field7=" + String(ChargingStatus);
+  sendCommand("AT+CIPMUX=1", 5, "OK");
+  sendCommand("AT+CIPSTART=0,\"TCP\",\"" + HOST + "\"," + PORT, 15, "OK");
+  sendCommand("AT+CIPSEND=0," + String(getData.length() + 4), 4, ">");
+  esp8266.println(getData);
+  delay(1500);
+  countTrueCommand++;
+  sendCommand("AT+CIPCLOSE=0", 5, "OK");
+  delay(5000);
+}
+int getmappedflow(){
+  int flow=analogRead(A5);
+  int data=map(flow, 0, 675 ,0 , 100);
+  return data;
+}
+void getBatStatus() {
+  double Thimbal = analogRead(A4) * 0.00488;
+  double Charging = analogRead(A3) * 0.01;
+  int battery = analogRead(A2);
+  if (Charging >= 4.0) {
+    ChargingStatus = 1;
+    ChargeCurrent = (Charging - Thimbal) * 2;
+  } else {
+    ChargingStatus = 0;
+    ChargeCurrent = 0;
+  }
+  BatVoltage = battery * 0.0049;
+
+  if (battery <= 715) {
+    BatPercentage = map(battery, 608, 725, 0, 20);
+  } else if ((BatVoltage > 725) && (BatVoltage <= 825)) {
+    BatPercentage = map(battery, 725, 825, 21, 80);
+  } else {
+    BatPercentage = map(battery, 825, 1040, 81, 100);
+  }
+}
+int getSensorData() {
+  number = analogRead(A1);
+  TDSdata = map(number, 0, 640, 100, 0);
+  Serial.print("The Number is\t ");
+  Serial.print((int)TDSdata);
+  Serial.println();
+  return TDSdata;  // Replace with your own sensor code
+}
+int getTDSdata() {
+  sensorValue = analogRead(A0);
+  Voltage = sensorValue * 0.004828125;                                                                      //Convert analog reading to Voltage
+  tdsValue = (133.42 * Voltage * Voltage * Voltage - 255.86 * Voltage * Voltage + 857.39 * Voltage) * 0.5;  //Convert voltage value to TDS value
+  Serial.print("TDS Value = ");
+  Serial.print(tdsValue);
+  Serial.println(" ppm");
+  return tdsValue;
+}
+
+
+void sendCommand(String command, int maxTime, char readReplay[]) {
+  Serial.print(countTrueCommand);
+  Serial.print(". at command => ");
+  Serial.print(command);
+  Serial.print(" ");
+  while (countTimeCommand < (maxTime * 1)) {
+    esp8266.println(command);      //at+cipsend
+    if (esp8266.find(readReplay))  //ok
+    {
+      found = true;
+      break;
+    }
+
+    countTimeCommand++;
+  }
+
+  if (found == true) {
+    Serial.println("OYI");
+    countTrueCommand++;
+    countTimeCommand = 0;
+  }
+
+  if (found == false) {
+    Serial.println("Fail");
+    countTrueCommand = 0;
+    countTimeCommand = 0;
+  }
+
+  found = false;
+}
+
